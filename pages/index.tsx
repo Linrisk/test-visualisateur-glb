@@ -1,19 +1,18 @@
 "use client"
 
-import type React from "react"
-
+import React, { useRef, useState, useEffect, Suspense } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
-import { OrbitControls, Environment, Grid, Stats, useGLTF, Center, Html } from "@react-three/drei"
-import { Suspense, useRef, useState, useEffect } from "react"
+import {Environment, Grid, Stats, useGLTF, Center, Html, OrbitControls } from "@react-three/drei"
+import * as THREE from "three"
+
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { RotateCcw, Move3D, Upload, Eye, EyeOff, Grid3X3, Sun, Moon } from "lucide-react"
-import type * as THREE from "three"
 
-// Composant pour afficher le modèle GLTF avec vue éclatée
+
 function GLTFModel({
   url,
   explodeAmount,
@@ -25,28 +24,24 @@ function GLTFModel({
   wireframe: boolean
   showBoundingBox: boolean
 }) {
-  const { scene, nodes, materials } = useGLTF(url)
+  const { scene, materials } = useGLTF(url)
   const groupRef = useRef<THREE.Group>(null)
   const [originalPositions, setOriginalPositions] = useState<Map<string, THREE.Vector3>>(new Map())
 
-  // Calculer les positions originales des objets
   useEffect(() => {
-    if (scene) {
-      const positions = new Map<string, THREE.Vector3>()
-      scene.traverse((child) => {
-        if (child.isMesh) {
-          positions.set(child.uuid, child.position.clone())
-        }
-      })
-      setOriginalPositions(positions)
-    }
+    const positions = new Map<string, THREE.Vector3>()
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        positions.set(child.uuid, child.position.clone())
+      }
+    })
+    setOriginalPositions(positions)
   }, [scene])
 
-  // Animation de la vue éclatée
   useFrame(() => {
-    if (scene && originalPositions.size > 0) {
+    if (originalPositions.size > 0) {
       scene.traverse((child) => {
-        if (child.isMesh) {
+        if (child instanceof THREE.Mesh) {
           const originalPos = originalPositions.get(child.uuid)
           if (originalPos) {
             const direction = originalPos.clone().normalize()
@@ -58,15 +53,12 @@ function GLTFModel({
     }
   })
 
-  // Appliquer le wireframe à tous les matériaux
   useEffect(() => {
-    if (materials) {
-      Object.values(materials).forEach((material: any) => {
-        if (material.isMaterial) {
-          material.wireframe = wireframe
-        }
-      })
-    }
+    Object.values(materials).forEach((material: any) => {
+      if (material?.isMaterial) {
+        material.wireframe = wireframe
+      }
+    })
   }, [materials, wireframe])
 
   return (
@@ -84,7 +76,7 @@ function GLTFModel({
   )
 }
 
-// Composant de chargement
+// Loading Spinner
 function LoadingSpinner() {
   return (
     <Html center>
@@ -96,23 +88,21 @@ function LoadingSpinner() {
   )
 }
 
-// Composant principal
+// Main Component
 export default function Component() {
   const [modelUrl, setModelUrl] = useState("/ISS_stationary.glb")
-
-  const [explodeAmount, setExplodeAmount] = useState([0])
+  const [explodeAmount, setExplodeAmount] = useState(0)
   const [wireframe, setWireframe] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
   const [showBoundingBox, setShowBoundingBox] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [environment, setEnvironment] = useState("sunset")
-  const [cameraPosition, setCameraPosition] = useState<[number, number, number]>([5, 5, 5])
-  const controlsRef = useRef<any>()
+  const [cameraPosition] = useState<[number, number, number]>([5, 5, 5])
+
+  const controlsRef = useRef<any>(null)
 
   const resetCamera = () => {
-    if (controlsRef.current) {
-      controlsRef.current.reset()
-    }
+    controlsRef.current?.reset()
   }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,18 +115,17 @@ export default function Component() {
 
   return (
     <div className="w-full h-screen bg-gray-900 relative">
-
       <div className="absolute top-4 left-4 z-10 space-y-4">
         <Card className="w-80 bg-black/80 backdrop-blur-sm border-gray-700">
           <CardHeader className="pb-3">
             <CardTitle className="text-white flex items-center gap-2">
               <Move3D className="w-5 h-5" />
-              Visualiseur GLTF
+              Visualiseur GLTF/GLB
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Charger un modèle GLTF</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Charger un modèle</label>
               <div className="relative">
                 <input
                   type="file"
@@ -159,11 +148,11 @@ export default function Component() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Vue éclatée: {explodeAmount[0].toFixed(1)}
+                Vue éclatée: {explodeAmount.toFixed(1)}
               </label>
               <Slider
-                value={explodeAmount}
-                onValueChange={setExplodeAmount}
+                value={[explodeAmount]}
+                onValueChange={([v]) => setExplodeAmount(v)}
                 max={5}
                 min={0}
                 step={0.1}
@@ -198,7 +187,7 @@ export default function Component() {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-300">Statistiques</span>
+                <span className="text-sm text-gray-300">FPS</span>
                 <Button variant={showStats ? "default" : "outline"} size="sm" onClick={() => setShowStats(!showStats)}>
                   📊
                 </Button>
@@ -253,9 +242,7 @@ export default function Component() {
         </Card>
       </div>
 
-   
       <Canvas camera={{ position: cameraPosition, fov: 50 }} shadows className="w-full h-full">
-  
         <ambientLight intensity={0.4} />
         <directionalLight
           position={[10, 10, 5]}
@@ -266,10 +253,8 @@ export default function Component() {
         />
         <pointLight position={[-10, -10, -10]} intensity={0.5} />
 
-        
         <Environment preset={environment as any} />
 
-      
         {showGrid && (
           <Grid
             renderOrder={-1}
@@ -279,39 +264,35 @@ export default function Component() {
             cellThickness={0.6}
             sectionSize={3.3}
             sectionThickness={1.5}
-            sectionColor={[0.5, 0.5, 10]}
+            sectionColor="#4A90E2"
             fadeDistance={30}
           />
         )}
 
-    
         <Suspense fallback={<LoadingSpinner />}>
           <GLTFModel
             url={modelUrl}
-            explodeAmount={explodeAmount[0]}
+            explodeAmount={explodeAmount}
             wireframe={wireframe}
             showBoundingBox={showBoundingBox}
           />
         </Suspense>
 
-
         <OrbitControls
           ref={controlsRef}
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
+          enablePan
+          enableZoom
+          enableRotate
+          enableDamping
           dampingFactor={0.05}
-          enableDamping={true}
         />
 
-       
         {showStats && <Stats />}
       </Canvas>
 
-  
       <div className="absolute bottom-4 right-4">
         <Badge variant="outline" className="bg-black/80 text-white border-gray-600">
-          Three.js + React Three Fiber
+          Github: Linrisk
         </Badge>
       </div>
     </div>
